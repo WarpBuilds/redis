@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
 
   test-ubuntu-latest:
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: warp-ubuntu-latest-x64-4x
     steps:
     - uses: actions/checkout@v3
     - name: make
@@ -26,7 +26,7 @@ jobs:
         if [[ ! -z  $dirty ]]; then echo $dirty; exit 1; fi
 
   test-sanitizer-address:
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: warp-ubuntu-latest-x64-4x
     steps:
       - uses: actions/checkout@v3
       - name: make
@@ -40,7 +40,7 @@ jobs:
         run: CFLAGS='-Werror' ./runtest-moduleapi --verbose --dump-logs
 
   build-debian-old:
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: warp-ubuntu-latest-x64-4x
     container: debian:buster
     steps:
     - uses: actions/checkout@v3
@@ -50,14 +50,14 @@ jobs:
         make REDIS_CFLAGS='-Werror'
 
   build-macos-latest:
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: warp-ubuntu-latest-x64-4x
     steps:
     - uses: actions/checkout@v3
     - name: make
       run: make REDIS_CFLAGS='-Werror'
 
   build-32bit:
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: warp-ubuntu-latest-x64-4x
     steps:
     - uses: actions/checkout@v3
     - name: make
@@ -66,14 +66,14 @@ jobs:
         make REDIS_CFLAGS='-Werror' 32bit
 
   build-libc-malloc:
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: warp-ubuntu-latest-x64-4x
     steps:
     - uses: actions/checkout@v3
     - name: make
       run: make REDIS_CFLAGS='-Werror' MALLOC=libc
 
   build-centos7-jemalloc:
-    runs-on: warp-ubuntu-latest-x64-2x
+    runs-on: warp-ubuntu-latest-x64-4x
     container: centos:7
     steps:
     - uses: actions/checkout@v3
