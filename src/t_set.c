@@ -1,30 +1,9 @@
 /*
- * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
+ * Copyright (c) 2009-Present, Redis Ltd.
  * All rights reserved.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *   * Redistributions of source code must retain the above copyright notice,
- *     this list of conditions and the following disclaimer.
- *   * Redistributions in binary form must reproduce the above copyright
- *     notice, this list of conditions and the following disclaimer in the
- *     documentation and/or other materials provided with the distribution.
- *   * Neither the name of Redis nor the names of its contributors may be used
- *     to endorse or promote products derived from this software without
- *     specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * Licensed under your choice of the Redis Source Available License 2.0
+ * (RSALv2) or the Server Side Public License v1 (SSPLv1).
  */
 
 #include "server.h"
@@ -256,7 +235,6 @@ int setTypeRemoveAux(robj *setobj, char *str, size_t len, int64_t llval, int str
     if (setobj->encoding == OBJ_ENCODING_HT) {
         sds sdsval = str_is_sds ? (sds)str : sdsnewlen(str, len);
         int deleted = (dictDelete(setobj->ptr, sdsval) == DICT_OK);
-        if (deleted && htNeedsResize(setobj->ptr)) dictResize(setobj->ptr);
         if (sdsval != str) sdsfree(sdsval); /* free temp copy */
         return deleted;
     } else if (setobj->encoding == OBJ_ENCODING_LISTPACK) {
@@ -454,7 +432,7 @@ robj *setTypePopRandom(robj *set) {
     if (set->encoding == OBJ_ENCODING_LISTPACK) {
         /* Find random and delete it without re-seeking the listpack. */
         unsigned int i = 0;
-        unsigned char *p = lpNextRandom(set->ptr, lpFirst(set->ptr), &i, 1, 0);
+        unsigned char *p = lpNextRandom(set->ptr, lpFirst(set->ptr), &i, 1, 1);
         unsigned int len = 0; /* initialize to silence warning */
         long long llele = 0; /* initialize to silence warning */
         char *str = (char *)lpGetValue(p, &len, &llele);
@@ -837,7 +815,7 @@ void spopWithCountCommand(client *c) {
         unsigned int index = 0;
         unsigned char **ps = zmalloc(sizeof(char *) * count);
         for (unsigned long i = 0; i < count; i++) {
-            p = lpNextRandom(lp, p, &index, count - i, 0);
+            p = lpNextRandom(lp, p, &index, count - i, 1);
             unsigned int len;
             str = (char *)lpGetValue(p, &len, (long long *)&llele);
 
@@ -899,7 +877,7 @@ void spopWithCountCommand(client *c) {
             unsigned int index = 0;
             unsigned char **ps = zmalloc(sizeof(char *) * remaining);
             for (unsigned long i = 0; i < remaining; i++) {
-                p = lpNextRandom(lp, p, &index, remaining - i, 0);
+                p = lpNextRandom(lp, p, &index, remaining - i, 1);
                 unsigned int len;
                 str = (char *)lpGetValue(p, &len, (long long *)&llele);
                 setTypeAddAux(newset, str, len, llele, 0);
@@ -1125,7 +1103,7 @@ void srandmemberWithCountCommand(client *c) {
         unsigned int i = 0;
         addReplyArrayLen(c, count);
         while (count) {
-            p = lpNextRandom(lp, p, &i, count--, 0);
+            p = lpNextRandom(lp, p, &i, count--, 1);
             unsigned int len;
             str = (char *)lpGetValue(p, &len, (long long *)&llele);
             if (str == NULL) {
@@ -1266,7 +1244,7 @@ int qsortCompareSetsByRevCardinality(const void *s1, const void *s2) {
     return 0;
 }
 
-/* SINTER / SMEMBERS / SINTERSTORE / SINTERCARD
+/* SINTER / SINTERSTORE / SINTERCARD
  *
  * 'cardinality_only' work for SINTERCARD, only return the cardinality
  * with minimum processing and memory overheads.
@@ -1440,6 +1418,36 @@ void sinterGenericCommand(client *c, robj **setkeys,
 /* SINTER key [key ...] */
 void sinterCommand(client *c) {
     sinterGenericCommand(c, c->argv+1,  c->argc-1, NULL, 0, 0);
+}
+
+/* SMEMBERS key */
+void smembersCommand(client *c) {
+    setTypeIterator *si;
+    char *str;
+    size_t len;
+    int64_t intobj;
+    robj *setobj = lookupKeyRead(c->db, c->argv[1]);
+    if (checkType(c,setobj,OBJ_SET)) return;
+    if (!setobj) {
+        addReply(c, shared.emptyset[c->resp]);
+        return;
+    }
+
+    /* Prepare the response. */
+    unsigned long length = setTypeSize(setobj);
+    addReplySetLen(c,length);
+    /* Iterate through the elements of the set. */
+    si = setTypeInitIterator(setobj);
+
+    while (setTypeNext(si, &str, &len, &intobj) != -1) {
+        if (str != NULL)
+            addReplyBulkCBuffer(c, str, len);
+        else
+            addReplyBulkLongLong(c, intobj);
+        length--;
+    }
+    setTypeReleaseIterator(si);
+    serverAssert(length == 0); /* fail on corrupt data */
 }
 
 /* SINTERCARD numkeys key [key ...] [LIMIT limit] */
